@@ -34,11 +34,11 @@ import org.elasticsearch.search.aggregations.bucket.filter.InternalFilter;
 import org.nuxeo.ecm.core.api.ClientException;
 import org.nuxeo.ecm.core.api.CoreSession;
 import org.nuxeo.ecm.core.api.DocumentModelList;
+import org.nuxeo.ecm.core.api.IterableQueryResult;
 import org.nuxeo.ecm.core.api.SortInfo;
 import org.nuxeo.ecm.core.api.impl.DocumentModelListImpl;
 import org.nuxeo.ecm.platform.query.api.Aggregate;
 import org.nuxeo.ecm.platform.query.api.Bucket;
-import org.nuxeo.elasticsearch.ElasticSearchConstants;
 import org.nuxeo.elasticsearch.aggregate.AggregateEsBase;
 import org.nuxeo.elasticsearch.api.ElasticSearchService;
 import org.nuxeo.elasticsearch.api.EsResult;
@@ -99,13 +99,17 @@ public class ElasticsearchServiceImpl implements ElasticSearchService {
         SearchResponse response = search(queryBuilder);
         DocumentModelListImpl docs = getDocumentModels(queryBuilder, response);
         List<Aggregate> aggs = getAggregates(queryBuilder, response);
-        return new EsResult(docs, aggs);
+        IterableQueryResult rows = getRows(queryBuilder, response);
+        if (queryBuilder.returnsDocuments()) {
+            return new EsResult(docs, aggs);
+        }
+        return new EsResult(rows, aggs);
     }
 
     protected DocumentModelListImpl getDocumentModels(NxQueryBuilder queryBuilder, SearchResponse response) {
         DocumentModelListImpl ret;
         long totalSize = response.getHits().getTotalHits();
-        if (response.getHits().getHits().length == 0) {
+        if (!queryBuilder.returnsDocuments() || response.getHits().getHits().length == 0) {
             ret = new DocumentModelListImpl(0);
             ret.setTotalSize(totalSize);
             return ret;
@@ -138,6 +142,10 @@ public class ElasticsearchServiceImpl implements ElasticSearchService {
         return ret;
     }
 
+    private IterableQueryResult getRows(NxQueryBuilder queryBuilder, SearchResponse response) {
+        return new EsResultSetImpl(response, queryBuilder.getSelectFields());
+    }
+
     protected SearchResponse search(NxQueryBuilder query) {
         Context stopWatch = searchTimer.time();
         try {
@@ -155,13 +163,11 @@ public class ElasticsearchServiceImpl implements ElasticSearchService {
         SearchRequestBuilder request = esa.getClient().prepareSearch(
                 esa.getSearchIndexes(query.getSearchRepositories())).setTypes(DOC_TYPE).setSearchType(
                 SearchType.DFS_QUERY_THEN_FETCH);
+        query.updateRequest(request);
         if (query.isFetchFromElasticsearch()) {
             // fetch the _source without the binaryfulltext field
             request.setFetchSource(esa.getIncludeSourceFields(), esa.getExcludeSourceFields());
-        } else {
-            request.addField(ElasticSearchConstants.ID_FIELD);
         }
-        query.updateRequest(request);
         return request;
     }
 

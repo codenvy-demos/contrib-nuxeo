@@ -294,6 +294,23 @@ final public class NxqlQueryConverter {
         return sortInfos;
     }
 
+    public static List<String> getSelectClauseFields(String nxql) {
+        final List<String> ret = new ArrayList<>();
+        SQLQuery nxqlQuery = getSqlQuery(nxql);
+        nxqlQuery.accept(new DefaultQueryVisitor() {
+
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public void visitSelectClause(SelectClause selectClause) {
+                for (int i = 0; i < selectClause.getSelectList().size(); i++) {
+                    ret.add(selectClause.get(i).toString());
+                }
+            }
+        });
+        return ret;
+    }
+
     /**
      * Class to hold both a query and a filter
      */
