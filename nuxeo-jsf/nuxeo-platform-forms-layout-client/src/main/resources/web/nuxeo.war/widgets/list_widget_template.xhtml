@@ -180,7 +180,8 @@
             template="#{templateValue}"
             required="#{widgetProperty_required}" diff="#{widgetProperty_diff}"
             rendered="#{isEditMode or not empty fieldOrValue}">
-            <h:panelGrid columns="#{isEditMode and showActions?2:1}">
+            <h:panelGrid columns="#{isEditMode and showActions?2:1}"
+              style="#{isListTemplate?'display:none;':''}">
               <c:if test="#{showActions}">
                 <h:panelGroup styleClass="listWidgetActionsTable">
                   <ui:include src="/widgets/list_widget_template_actions.xhtml" />
@@ -210,6 +211,13 @@
                 </table>
               </h:panelGroup>
             </h:panelGrid>
+
+            <ui:fragment rendered="#{isListTemplate}">
+              <a class="button smallButton listWidgetActionAdd" href="#nogo"
+                onclick="nuxeo.utils.addFromListTemplate(jQuery(this).prev()); return false;">
+                <h:outputText value="#{messages['command.add']}" />
+              </a>
+            </ui:fragment>
           </nxu:jsInputList>
 
           <nxu:inputList value="#{fieldOrValue}"

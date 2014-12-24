@@ -257,8 +257,12 @@ public class EditableModelImpl extends DataModel implements EditableModel, Seria
 
     @Override
     public void setRowIndex(int rowIndex) {
-        if (rowIndex < -1) {
+        if (rowIndex < -2) {
             throw new IllegalArgumentException();
+        }
+        if (rowIndex == -2) {
+            // do nothing
+            return;
         }
         int old = index;
         index = rowIndex;

@@ -336,11 +336,14 @@ public class UIValueHolder extends HtmlInputText implements ResettableComponent 
 
     @Override
     public void restoreState(FacesContext context, Object state) {
-        Object[] values = (Object[]) state;
-        super.restoreState(context, values[0]);
-        var = (String) values[1];
-        submitValue = (Boolean) values[2];
-        submittedValue = values[3];
+        // XXX
+        if (state != null) {
+            Object[] values = (Object[]) state;
+            super.restoreState(context, values[0]);
+            var = (String) values[1];
+            submitValue = (Boolean) values[2];
+            submittedValue = values[3];
+        }
     }
 
     /**

@@ -46,6 +46,10 @@ nuxeo.utils = (function(m) {
     jQuery(document.getElementById(eltId)).select2(params);
   };
 
+  m.addFromListTemplate = function(templateElement) {
+    jQuery(templateElement).show();
+  };
+
   return m
 
 }(nuxeo.utils || {}));

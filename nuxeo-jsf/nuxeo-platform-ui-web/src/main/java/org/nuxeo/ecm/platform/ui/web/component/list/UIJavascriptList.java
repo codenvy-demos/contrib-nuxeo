@@ -35,10 +35,13 @@ import javax.faces.application.Application;
 import javax.faces.application.FacesMessage;
 import javax.faces.application.StateManager;
 import javax.faces.component.ContextCallback;
+import javax.faces.component.EditableValueHolder;
 import javax.faces.component.NamingContainer;
+import javax.faces.component.UIColumn;
 import javax.faces.component.UIComponent;
 import javax.faces.component.UIComponentBase;
 import javax.faces.component.UIData;
+import javax.faces.component.UIForm;
 import javax.faces.component.UIInput;
 import javax.faces.component.UINamingContainer;
 import javax.faces.component.UIViewRoot;
@@ -79,6 +82,10 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
     public static final String COMPONENT_TYPE = UIJavascriptList.class.getName();
 
     private static final Log log = LogFactory.getLog(UIJavascriptList.class);
+
+    protected static final String TEMPLATE_INDEX_MARKER = "TEMPLATE_INDEX_MARKER";
+
+    protected static final String IS_LIST_TEMPLATE_VAR = "isListTemplate";
 
     public UIJavascriptList() {
         super();
@@ -242,6 +249,43 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
         setRowIndexRowStatePreserved(rowIndex);
     }
 
+    private void setRowIndexWithoutRowStatePreserved(int rowIndex) {
+        // Save current state for the previous row index
+        saveDescendantState();
+
+        // Update to the new row index
+        // this.rowIndex = rowIndex;
+        getStateHelper().put(PropertyKeys.rowIndex, rowIndex);
+        EditableModel localModel = getDataModel();
+        localModel.setRowIndex(rowIndex);
+
+        // if rowIndex is -1, clear the cache
+        if (rowIndex == -1) {
+            setDataModel(null);
+        }
+
+        // Clear or expose the current row data as a request scope attribute
+        String var = (String) getStateHelper().get(PropertyKeys.var);
+        if (var != null) {
+            Map<String, Object> requestMap = getFacesContext().getExternalContext().getRequestMap();
+            if (rowIndex < 0) {
+                oldVar = requestMap.remove(var);
+            } else if (isRowAvailable()) {
+                requestMap.put(var, getRowData());
+            } else {
+                requestMap.remove(var);
+                if (null != oldVar) {
+                    requestMap.put(var, oldVar);
+                    oldVar = null;
+                }
+            }
+        }
+
+        // Reset current state information for the new row index
+        restoreDescendantState();
+
+    }
+
     @SuppressWarnings({ "unchecked" })
     private void setRowIndexRowStatePreserved(int rowIndex) {
         if (rowIndex < -1) {
@@ -261,7 +305,7 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
             if (sm != null && !sm.isEmpty()) {
                 _rowDeltaStates.put(getContainerClientId(facesContext), sm);
             }
-            if (getRowIndex() != -1) {
+            if (getRowIndex() >= 0) {
                 _rowTransientStates.put(getContainerClientId(facesContext),
                         saveTransientDescendantComponentStates(facesContext, null, getChildren().iterator(), false));
             }
@@ -460,6 +504,18 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
                 clientIdBuilder.setLength(0);
             }
             return (cid);
+        } else if (rowIndex == -2) {
+            // template use case: use a marker instead of row index for easier js replacements on client side.
+            String cid;
+            if (!isNestedWithinIterator()) {
+                cid = clientIdBuilder.append(TEMPLATE_INDEX_MARKER).toString();
+                clientIdBuilder.setLength(baseClientIdLength);
+            } else {
+                cid = clientIdBuilder.append(super.getClientId(context)).append(
+                        UINamingContainer.getSeparatorChar(context)).append(TEMPLATE_INDEX_MARKER).toString();
+                clientIdBuilder.setLength(0);
+            }
+            return (cid);
         } else {
             if (!isNestedWithinIterator()) {
                 // Not nested and no row available, so just return our baseClientId
@@ -599,7 +655,6 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
     public void encodeBegin(FacesContext context) throws IOException {
         preEncode(context);
         super.encodeBegin(context);
-
     }
 
     @Override
@@ -622,6 +677,48 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
         }
 
         iterate(context, PhaseId.RENDER_RESPONSE);
+
+        encodeTemplate(context);
+    }
+
+    /**
+     * Renders an element using rowIndex -2 and client side marker {@link #TEMPLATE_INDEX_MARKER}.
+     * <p>
+     * This element will be used on client side by js code to handle addition of a new element.
+     */
+    protected void encodeTemplate(FacesContext context) {
+        int oldIndex = getRowIndex();
+        setRowIndexWithoutRowStatePreserved(-2);
+
+        // expose a boolean that can be used on client side to hide this element without disturbing the DOM
+        Map<String, Object> requestMap = getFacesContext().getExternalContext().getRequestMap();
+        boolean hasVar = false;
+        if (requestMap.containsKey(IS_LIST_TEMPLATE_VAR)) {
+            hasVar = true;
+        }
+        Object oldIsTemplateBoolean = requestMap.remove(IS_LIST_TEMPLATE_VAR);
+        requestMap.put(IS_LIST_TEMPLATE_VAR, Boolean.TRUE);
+
+        if (getChildCount() > 0) {
+            for (UIComponent kid : getChildren()) {
+                if (!kid.isRendered()) {
+                    continue;
+                }
+                try {
+                    ComponentSupport.encodeRecursive(context, kid);
+                } catch (IOException err) {
+                    log.error("Error while rendering component " + kid);
+                }
+            }
+        }
+        setRowIndexWithoutRowStatePreserved(oldIndex);
+
+        // restore
+        if (hasVar) {
+            requestMap.put(IS_LIST_TEMPLATE_VAR, oldIsTemplateBoolean);
+        } else {
+            requestMap.remove(IS_LIST_TEMPLATE_VAR);
+        }
     }
 
     @Override
@@ -722,6 +819,8 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
 
         if (!isValid()) {
             context.renderResponse();
+            // FIXME
+            // throw new ValidationException("blah");
         }
     }
 
@@ -1367,6 +1466,147 @@ public class UIJavascriptList extends UIInput implements NamingContainer {
     private boolean contextHasErrorMessages(FacesContext context) {
         FacesMessage.Severity sev = context.getMaximumSeverity();
         return (sev != null && (FacesMessage.SEVERITY_ERROR.compareTo(sev) >= 0));
+    }
+
+    private void restoreDescendantState() {
+
+        FacesContext context = getFacesContext();
+        if (getChildCount() > 0) {
+            for (UIComponent kid : getChildren()) {
+                if (kid instanceof UIColumn) {
+                    restoreDescendantState(kid, context);
+                }
+            }
+        }
+
+    }
+
+    @SuppressWarnings("unchecked")
+    private void restoreDescendantState(UIComponent component, FacesContext context) {
+
+        // Reset the client identifier for this component
+        String id = component.getId();
+        component.setId(id); // Forces client id to be reset
+        Map<String, SavedState> saved = (Map<String, SavedState>) getStateHelper().get(PropertyKeys.saved);
+        // Restore state for this component (if it is a EditableValueHolder)
+        if (component instanceof EditableValueHolder) {
+            EditableValueHolder input = (EditableValueHolder) component;
+            String clientId = component.getClientId(context);
+
+            SavedState state = (saved == null ? null : saved.get(clientId));
+            if (state == null) {
+                input.resetValue();
+            } else {
+                input.setValue(state.getValue());
+                input.setValid(state.isValid());
+                input.setSubmittedValue(state.getSubmittedValue());
+                // This *must* be set after the call to setValue(), since
+                // calling setValue() always resets "localValueSet" to true.
+                input.setLocalValueSet(state.isLocalValueSet());
+            }
+        } else if (component instanceof UIForm) {
+            UIForm form = (UIForm) component;
+            String clientId = component.getClientId(context);
+            SavedState state = (saved == null ? null : saved.get(clientId));
+            if (state == null) {
+                // submitted is transient state
+                form.setSubmitted(false);
+            } else {
+                form.setSubmitted(state.getSubmitted());
+            }
+        }
+
+        // Restore state for children of this component
+        if (component.getChildCount() > 0) {
+            for (UIComponent kid : component.getChildren()) {
+                restoreDescendantState(kid, context);
+            }
+        }
+
+        // Restore state for facets of this component
+        if (component.getFacetCount() > 0) {
+            for (UIComponent facet : component.getFacets().values()) {
+                restoreDescendantState(facet, context);
+            }
+        }
+
+    }
+
+    private void saveDescendantState() {
+
+        FacesContext context = getFacesContext();
+        if (getChildCount() > 0) {
+            for (UIComponent kid : getChildren()) {
+                if (kid instanceof UIColumn) {
+                    saveDescendantState(kid, context);
+                }
+            }
+        }
+
+    }
+
+    @SuppressWarnings("unchecked")
+    private void saveDescendantState(UIComponent component, FacesContext context) {
+
+        // Save state for this component (if it is a EditableValueHolder)
+        Map<String, SavedState> saved = (Map<String, SavedState>) getStateHelper().get(PropertyKeys.saved);
+        if (component instanceof EditableValueHolder) {
+            EditableValueHolder input = (EditableValueHolder) component;
+            SavedState state = null;
+            String clientId = component.getClientId(context);
+            if (saved == null) {
+                state = new SavedState();
+            }
+            if (state == null) {
+                state = saved.get(clientId);
+                if (state == null) {
+                    state = new SavedState();
+                }
+            }
+            state.setValue(input.getLocalValue());
+            state.setValid(input.isValid());
+            state.setSubmittedValue(input.getSubmittedValue());
+            state.setLocalValueSet(input.isLocalValueSet());
+            if (state.hasDeltaState()) {
+                getStateHelper().put(PropertyKeys.saved, clientId, state);
+            } else if (saved != null) {
+                getStateHelper().remove(PropertyKeys.saved, clientId);
+            }
+        } else if (component instanceof UIForm) {
+            UIForm form = (UIForm) component;
+            String clientId = component.getClientId(context);
+            SavedState state = null;
+            if (saved == null) {
+                state = new SavedState();
+            }
+            if (state == null) {
+                state = saved.get(clientId);
+                if (state == null) {
+                    state = new SavedState();
+                }
+            }
+            state.setSubmitted(form.isSubmitted());
+            if (state.hasDeltaState()) {
+                getStateHelper().put(PropertyKeys.saved, clientId, state);
+            } else if (saved != null) {
+                getStateHelper().remove(PropertyKeys.saved, clientId);
+            }
+        }
+
+        // Save state for children of this component
+        if (component.getChildCount() > 0) {
+            for (UIComponent uiComponent : component.getChildren()) {
+                saveDescendantState(uiComponent, context);
+            }
+        }
+
+        // Save state for facets of this component
+        if (component.getFacetCount() > 0) {
+            for (UIComponent facet : component.getFacets().values()) {
+                saveDescendantState(facet, context);
+            }
+        }
+
     }
 
 }
