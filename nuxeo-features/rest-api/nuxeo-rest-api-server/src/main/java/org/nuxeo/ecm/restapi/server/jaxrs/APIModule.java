@@ -55,6 +55,10 @@ import org.nuxeo.ecm.restapi.jaxrs.io.usermanager.NuxeoGroupWriter;
 import org.nuxeo.ecm.restapi.jaxrs.io.usermanager.NuxeoPrincipalListWriter;
 import org.nuxeo.ecm.restapi.jaxrs.io.usermanager.NuxeoPrincipalReader;
 import org.nuxeo.ecm.restapi.jaxrs.io.usermanager.NuxeoPrincipalWriter;
+import org.nuxeo.ecm.restapi.jaxrs.io.validation.ConstraintViolationWriter;
+import org.nuxeo.ecm.restapi.jaxrs.io.validation.ConstraintWriter;
+import org.nuxeo.ecm.restapi.jaxrs.io.validation.DocumentValidationExceptionMapper;
+import org.nuxeo.ecm.restapi.jaxrs.io.validation.DocumentValidationReportWriter;
 import org.nuxeo.ecm.webengine.app.WebEngineModule;
 
 /**
@@ -110,6 +114,10 @@ public class APIModule extends WebEngineModule {
         result.add(new DocumentTypesWriter());
         result.add(new FacetWriter());
         result.add(new FacetsWriter());
+        result.add(new ConstraintWriter());
+        result.add(new ConstraintViolationWriter());
+        result.add(new DocumentValidationReportWriter());
+        result.add(new DocumentValidationExceptionMapper());
 
         return result;
     }
