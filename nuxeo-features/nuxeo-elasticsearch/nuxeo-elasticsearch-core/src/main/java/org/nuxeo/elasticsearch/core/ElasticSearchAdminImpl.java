@@ -36,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.util.concurrent.ListenableFuture;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest;
@@ -135,7 +136,7 @@ public class ElasticSearchAdminImpl implements ElasticSearchAdmin {
         Builder sBuilder = ImmutableSettings.settingsBuilder();
         sBuilder.put("http.enabled", conf.httpEnabled()).put("path.data", conf.getDataPath()).put(
                 "index.number_of_shards", 1).put("index.number_of_replicas", 0).put("cluster.name",
-                conf.getClusterName()).put("node.name", conf.getNodeName());
+                conf.getClusterName()).put("node.name", conf.getNodeName()).put("http.netty.worker_count", 4);
         if (conf.getIndexStorageType() != null) {
             sBuilder.put("index.store.type", conf.getIndexStorageType());
             if (conf.getIndexStorageType().equals("memory")) {
@@ -373,6 +374,11 @@ public class ElasticSearchAdminImpl implements ElasticSearchAdmin {
     @Override
     public boolean isIndexingInProgress() {
         // impl of scheduling is left to the ESService
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @Override
+    public ListenableFuture<Boolean> prepareWaitForIndexing() {
         throw new UnsupportedOperationException("Not implemented");
     }
 
