@@ -99,8 +99,6 @@ public final class FaceletHandlerHelper {
      */
     public static String DEV_MODE_DISABLED_VARIABLE = "nuxeoLayoutDevModeDisabled";
 
-    static final String LAYOUT_ID_COUNTERS = "org.nuxeo.ecm.platform.layouts.LAYOUT_ID_COUNTERS";
-
     private static final Pattern UNIQUE_ID_STRIP_PATTERN = Pattern.compile("(.*)(_[0-9]+)");
 
     /**
@@ -139,16 +137,20 @@ public final class FaceletHandlerHelper {
     /**
      * Returns a id unique within the facelet context using given id as base.
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
     public String generateUniqueId(String base) {
-        Map<String, Object> requestMap = context.getFacesContext().getExternalContext().getRequestMap();
-        Map<String, Integer> counters = (Map) requestMap.get(LAYOUT_ID_COUNTERS);
-        if (counters == null) {
-            counters = new HashMap<String, Integer>();
+        FacesContext faces = context.getFacesContext();
+        NuxeoLayoutIdManagerBean bean = lookupIdBean(faces);
+        return bean.generateUniqueId(base);
+    }
+
+    protected static NuxeoLayoutIdManagerBean lookupIdBean(FacesContext ctx) {
+        String expr = "#{" + NuxeoLayoutIdManagerBean.NAME + "}";
+        NuxeoLayoutIdManagerBean bean = (NuxeoLayoutIdManagerBean) ctx.getApplication().evaluateExpressionGet(ctx,
+                expr, Object.class);
+        if (bean == null) {
+            throw new RuntimeException("Managed bean not found: " + expr);
         }
-        String generatedId = generateUniqueId(generateValidIdString(base), counters);
-        requestMap.put(LAYOUT_ID_COUNTERS, counters);
-        return generatedId;
+        return bean;
     }
 
     /**
@@ -294,26 +296,6 @@ public final class FaceletHandlerHelper {
         List<TagAttribute> allAttrs = new ArrayList<TagAttribute>(Arrays.asList(orig.getAll()));
         allAttrs.add(newAttr);
         return getTagAttributes(allAttrs);
-    }
-
-    /**
-     * Copies tag attributes with given names from the tag config, using given id as base for the id attribute.
-     */
-    public TagAttributes copyTagAttributes(String id, String... names) {
-        List<TagAttribute> list = new ArrayList<TagAttribute>();
-        list.add(createIdAttribute(id));
-        for (String name : names) {
-            if ("id".equals(name)) {
-                // ignore
-                continue;
-            }
-            TagAttribute attr = tagConfig.getTag().getAttributes().get(name);
-            if (attr != null) {
-                list.add(attr);
-            }
-        }
-        TagAttribute[] attrs = list.toArray(new TagAttribute[list.size()]);
-        return new TagAttributesImpl(attrs);
     }
 
     /**
